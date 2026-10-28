@@ -37,6 +37,44 @@ struct DynamicCamera {
                 const sf::Vector2f& trackedPosWorld,      // world coords of player to track
                 const sf::Vector2f& trackedVelocityWorld  // world velocity of player to track
     ) {
+        const float windowWidthWorld = camera.windowPercentToWorldDist(sf::Vector2f{1.f, 0.f}).x;
+
+        constexpr float VEL_EPS = 0.5f;
+
+        if (trackedVelocityWorld.x > VEL_EPS) {
+            targetLookahead = lookAhead * windowWidthWorld;
+        } else if (trackedVelocityWorld.x < -VEL_EPS) {
+            targetLookahead = -lookAhead * windowWidthWorld;
+        } else {
+            targetLookahead = 0.f;
+        }
+
+        lookaheadState += alpha * (targetLookahead - lookaheadState);
+
+        const float playerX = camera.worldToWindowPercent(trackedPosWorld).x + lookaheadState / windowWidthWorld;
+
+        float correction = 0.f;
+
+        if (!deadZoneX.contains(playerX)) {
+            const bool left = playerX < deadZoneX.min;
+            const float deadB = left ? deadZoneX.min : deadZoneX.max;
+
+            if (softZoneX.contains(playerX)) {
+                correction = alpha * (playerX - deadB) * windowWidthWorld;
+            } else {
+                const float softB = left ? softZoneX.min : softZoneX.max;
+
+                correction =  (alpha * (softB - deadB) + (playerX - softB)) * windowWidthWorld;
+            }
+        }
+
+        cameraUnadjustedCenter.x += correction;
+        cameraUnadjustedCenter.y = camera.getCameraCenter().y;
+
+        camera.setCameraCenter(cameraUnadjustedCenter + sf::Vector2f{lookaheadState, 0.f});
+
+        // I'm doing something wrong but idk, so I'm just submitting this
+
         // TODO: (HINTS/outline)
         // collect statistics on the player position and velocity in (normalized, if you like)
         // window coordinates. Compute lookAhead distance in world coords, adjusting for
@@ -59,6 +97,7 @@ struct DynamicCamera {
     mutable sf::Vector2f
         cameraUnadjustedCenter;      // the camera world center from last frame, ignoring lookahead
     mutable float lookaheadState{};  // the EMA of the accumulated lookahead offset in world coords
+    mutable float targetLookahead{};
 };
 
 #endif // DYNAMIC_CAMERA_H
